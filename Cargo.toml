@@ -5,7 +5,7 @@ edition = "2021"
 
 
 [lib]
-name = "xfbinlib"
+name = "xfbin_lib"
 crate-type = ["cdylib", "rlib"]
 
 
@@ -21,7 +21,6 @@ binrw = "0.10.0"
 
 # used for downcasting and type checking
 downcast-rs = "1.1.1"
-
 
 # better hashmap
 hashbrown = "0.11.2"

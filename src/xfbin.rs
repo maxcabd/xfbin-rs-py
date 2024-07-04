@@ -151,12 +151,13 @@ impl XfbinPage {
 }
 
     
-/*impl From<XfbinFile> for Xfbin {
+impl From<XfbinFile> for Xfbin {
     fn from(xfbin: XfbinFile) -> Self {
         let mut pages = Vec::new();
 
         
 
+        // Create a new XfbinPage PyObj
         let mut page = Python::with_gil(
             |py| XfbinPage::__new__(py, None, None, None)
         );
@@ -267,19 +268,34 @@ impl XfbinPage {
                 struct_infos: struct_infos_mapped.clone(),
                 struct_references: struct_references.clone(),
             });
-
+            
+            
+        
             let struct_info = parsed_struct.struct_info_mut();
             struct_info.chunk_name = chunk_name.clone();
             struct_info.filepath = filepath.clone();
             struct_info.chunk_type = chunk_type.clone();
 
-          
 
-            page.structs = Python::with_gil(|py| {
-                PyList::new_bound(py, vec![parsed_struct_py]).into()
+            let structs: Py<PyList> = Python::with_gil(|py| {
+                let mut structs: Vec<PyObject> = page.structs.extract(py).unwrap();
+
+                let py_struct: Py<PyAny> = Python::with_gil(|py| {
+                    let py_struct = parsed_struct.into_py(py);
+                    
+                    py_struct 
+                });
+                
+                structs.push(py_struct.into());
+                PyList::new_bound(py, structs).into()
             });
 
+
+            page.structs = structs;
+
         }
+
+        
 
 
 
@@ -295,7 +311,7 @@ impl XfbinPage {
             pages,
         }
     }
-}*/
+}
 
 fn repack_struct(
     boxed: Box<dyn NuccChunk>,

@@ -251,7 +251,6 @@ impl IntoPy<PyObject> for Box<dyn NuccStruct> {
         // Match on the concrete types implementing `NuccStruct` and convert them to Python objects
         match self.chunk_type() {
 
-            
             NuccChunkType::NuccChunkAnm => {
                 let nucc_anm: Box<NuccAnm> = self.downcast().unwrap();
                 nucc_anm.into_py(py)
@@ -265,6 +264,11 @@ impl IntoPy<PyObject> for Box<dyn NuccStruct> {
             NuccChunkType::NuccChunkCamera => {
                 let nucc_camera: Box<NuccCamera> = self.downcast().unwrap();
                 nucc_camera.into_py(py)
+            }
+
+            NuccChunkType::NuccChunkUnknown => {
+                let nucc_unknown: Box<NuccUnknown> = self.downcast().unwrap();
+                nucc_unknown.into_py(py)
             }
             // Add other cases for the remaining concrete types
             _ => panic!("Unsupported NuccStruct type for conversion to PyAny"),

@@ -40,10 +40,7 @@ pub use nucc_chunk_unknown::NuccChunkUnknown;
 pub trait NuccChunk: Downcast + fmt::Debug {
     fn chunk_type(&self) -> NuccChunkType;
     fn version(&self) -> u16;
-    fn extension(&self) -> String {
-        String::new()
-    }
-
+    
     fn read_boxed(
         input: &[u8],
         version: u16,
@@ -55,8 +52,10 @@ pub trait NuccChunk: Downcast + fmt::Debug {
         let mut cursor = Cursor::new(input);
         let result = Self::read_le_args(&mut cursor, version)?;
 
-        // Return the remaining data and the boxed value
+        // set the version of the chunk
         Ok((input.into(), Box::new(result) as Box<dyn NuccChunk>))
+
+       
     }
 
     fn write_boxed(

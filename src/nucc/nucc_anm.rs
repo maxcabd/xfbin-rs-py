@@ -3,7 +3,7 @@ use super::*;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
-use crate::nucc_chunk::nucc_chunk_anm::{AnmClump, CoordParent, AnmCoord, AnmEntry, CurveHeader, Curve, CurveFormat, EntryFormat};
+use crate::nucc_chunk::nucc_chunk_anm::{AnmClump, CoordParent, AnmCoord, AnmEntry, TrackHeader, AnmTrack, NuccAnmKey, EntryFormat};
 
 
 #[derive(Debug, Clone)]
@@ -48,43 +48,43 @@ pub struct Entry {
     pub entry_format: EntryFormat,
 
     #[pyo3(get, set)]
-    pub curve_headers: Py<PyList>,
+    pub track_headers: Py<PyList>,
 
     #[pyo3(get, set)]
-    pub curves: Py<PyList>,
+    pub tracks: Py<PyList>,
 }
 
 #[pymethods]
 impl Entry {
     #[new]
-    #[pyo3(signature = (coord = None, entry_format = None, curve_headers = None, curves = None))]
+    #[pyo3(signature = (coord = None, entry_format = None, track_headers = None, tracks = None))]
     pub fn __new__(
         py: Python,
         coord: Option<AnmCoord>,
         entry_format: Option<EntryFormat>,
-        curve_headers: Option<Py<PyList>>,
-        curves: Option<Py<PyList>>,
+        track_headers: Option<Py<PyList>>,
+        tracks: Option<Py<PyList>>,
     ) -> Self {
         Self {
             coord: coord.unwrap_or_default(),
             entry_format: entry_format.unwrap_or_default(),
-            curve_headers: curve_headers.unwrap_or(PyList::empty_bound(py).into()),
-            curves: curves.unwrap_or(PyList::empty_bound(py).into()),
+            track_headers: track_headers.unwrap_or(PyList::empty_bound(py).into()),
+            tracks: tracks.unwrap_or(PyList::empty_bound(py).into()),
         }
     }
 
     fn __repr__(&self) -> PyResult<String> {
         Python::with_gil(|py| {
-            let curve_headers: Vec<CurveHeader> = self.curve_headers.extract(py)?;
-            let curves: Vec<Curve> = self.curves.extract(py)?;
+            let track_headers: Vec<TrackHeader> = self.track_headers.extract(py)?;
+            let tracks: Vec<Track> = self.tracks.extract(py)?;
 
             // Use original __repr__ methods 
-            let curves: Vec<String> = curves.iter().map(|curve| curve.__repr__().unwrap()).collect();
-            let curve_headers: Vec<String> = curve_headers.iter().map(|curve_header| curve_header.__repr__().unwrap()).collect();
+            let tracks: Vec<String> = tracks.iter().map(|track| track.__repr__().unwrap()).collect();
+            let track_headers: Vec<String> = track_headers.iter().map(|curve_header| curve_header.__repr__().unwrap()).collect();
     
         Ok(format!(
-            "AnmEntry(coord={:?}, entry_format=EntryFormat.{:?}, curve_headers={}, curves={})",
-            self.coord, self.entry_format, curve_headers.join(", "), curves.join(", ")
+            "AnmEntry(coord={:?}, entry_format=EntryFormat.{:?}, track_headers={}, tracks={})",
+            self.coord, self.entry_format, track_headers.join(", "), tracks.join(", ")
         ))
         })
     }
@@ -92,11 +92,42 @@ impl Entry {
     fn __str__(&self) -> PyResult<String> {
         self.__repr__()
     }
-    
-
 }
 
+#[derive(Debug, Clone)]
+#[pyclass]
+pub struct Track {
+    #[pyo3(get, set)]
+    pub keys: Py<PyList>,
+}
 
+#[pymethods]
+impl Track {
+    #[new]
+    #[pyo3(signature = (keys = None))]
+    pub fn __new__(
+        py: Python,
+        keys: Option<Py<PyList>>,
+    ) -> Self {
+        Self {
+            keys: keys.unwrap_or(PyList::empty_bound(py).into()),
+        }
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        Python::with_gil(|py| {
+            let keys: Vec<NuccAnmKey> = self.keys.extract(py)?;
+
+        Ok(format!(
+            "NuccAnmKey(keyframes={:?})", keys))
+        })
+    }
+
+    fn __str__(&self) -> PyResult<String> {
+        self.__repr__()
+    }
+
+}
 
 #[pymethods]
 impl NuccAnm {
@@ -175,32 +206,45 @@ impl From<NuccStructConverter> for NuccAnm {
             PyList::new_bound(py, coord_parents).into()
         });
 
-        // Convert AnmEntry to Entry to store in PyList
+
         let entries = Python::with_gil(|py| {
             let entries: Vec<PyObject> = chunk.entries.iter().map(|entry| {
-                let curve_headers: Py<PyList> = Python::with_gil(|py| {
-                    let curve_headers: Vec<PyObject> = entry.curve_headers.iter().map(|curve_header| {
+                let track_headers: Py<PyList> = Python::with_gil(|py| {
+                    let track_headers: Vec<PyObject> = entry.track_headers.iter().map(|curve_header| {
                         let py_curve_header = Py::new(py, curve_header.clone()).unwrap();
                         py_curve_header.into_py(py)
                     }).collect();
 
-                    PyList::new_bound(py, curve_headers).into()
+                    PyList::new_bound(py, track_headers).into()
                 });
 
-                let curves: Py<PyList> = Python::with_gil(|py| {
-                    let curves: Vec<PyObject> = entry.curves.iter().map(|curve| {
-                        let py_curve = Py::new(py, curve.clone()).unwrap();
-                        py_curve.into_py(py)
+                let tracks: Py<PyList> = Python::with_gil(|py| {
+                    let tracks: Vec<PyObject> = entry.tracks.iter().map(|anm_track| {
+                        let keys: Py<PyList> = Python::with_gil(|py| {
+                            let keys: Vec<PyObject> = anm_track.keys.iter().map(|value| {
+                                let key = Py::new(py, value.clone()).unwrap();
+                                key.into_py(py)
+                            }).collect();
+
+                            PyList::new_bound(py, keys).into()
+                        });
+
+                        let track = Track {
+                            keys,
+                        };
+
+                        let py_channel = Py::new(py, track).unwrap();
+                        py_channel.into_py(py)
                     }).collect();
 
-                    PyList::new_bound(py, curves).into()
+                    PyList::new_bound(py, tracks).into()
                 });
 
                 let entry = Entry {
                     coord: entry.coord.clone(),
                     entry_format: entry.entry_format.clone(),
-                    curve_headers,
-                    curves,
+                    track_headers,
+                    tracks,
                 };
 
                 let py_entry = Py::new(py, entry).unwrap();
@@ -243,33 +287,34 @@ impl From<NuccChunkConverter> for Box<NuccChunkAnm> {
             anm.coord_parents.extract(py).unwrap()
         });
 
-        
-
         let entries: Vec<Entry> = Python::with_gil(|py| {
             anm.entries.extract(py).unwrap()
         });
 
-        // convert Entry to AnmEntry
-        let mut entries: Vec<AnmEntry> = entries.iter().map(|entry| {
-            let curve_headers: Vec<CurveHeader> = Python::with_gil(|py| {
-                entry.curve_headers.extract(py).unwrap()
+
+        let anm_entries: Vec<AnmEntry> = entries.iter().map(|entry| {
+            let track_headers: Vec<TrackHeader> = Python::with_gil(|py| {
+                entry.track_headers.extract(py).unwrap()
             });
 
-            let curves: Vec<Curve> = Python::with_gil(|py| {
-                entry.curves.extract(py).unwrap()
+            let anm_tracks: Vec<AnmTrack> = Python::with_gil(|py| {
+                let tracks: Vec<Track> = entry.tracks.extract(py).unwrap();
+                tracks.iter().map(|track| {
+                    let keys: Vec<NuccAnmKey> = track.keys.extract(py).unwrap();
+                    AnmTrack {
+                        keys
+                    }
+                }).collect()
             });
 
             AnmEntry {
                 coord: entry.coord.clone(),
                 entry_format: entry.entry_format.clone(),
-                curve_headers,
-                curves,
+                track_headers,
+                tracks: anm_tracks,
             }
         }).collect();
 
-
- 
- 
         let mut chunk = NuccChunkAnm::default();
         chunk.version = anm.version;
         chunk.frame_count = anm.frame_count;
@@ -278,7 +323,7 @@ impl From<NuccChunkConverter> for Box<NuccChunkAnm> {
         chunk.other_entries_indices = anm.other_entries_indices;
         chunk.unk_entry_indices = anm.unk_entry_indices;
         chunk.coord_parents = coord_parents;
-        chunk.entries = entries;
+        chunk.entries = anm_entries;
 
         Box::new(chunk)
     }

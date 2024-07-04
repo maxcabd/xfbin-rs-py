@@ -25,8 +25,4 @@ impl NuccChunk for NuccChunkBinary {
     fn version(&self) -> u16 {
         self.version
     }
-
-    fn extension(&self) -> String {
-        String::from(".binary")
-    }
 }

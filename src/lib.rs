@@ -7,26 +7,26 @@ pub mod xfbin_file;
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
-use binrw::{io::Cursor, BinWriterExt};
-use std::fs::File;
-use std::io::Write;
+use binrw::{io::Cursor, BinReaderExt, BinWriterExt};
+use std::{fs, fs::File, io::Write};
+
 
 pub use xfbin::{Xfbin, XfbinPage};
 pub use nucc::{NuccStructInfo, NuccStructReference};
-pub use nucc::{NuccAnm, nucc_anm::Entry, NuccBinary, NuccCamera};
+pub use nucc::{NuccAnm, nucc_anm::Entry, nucc_anm::Track, NuccBinary, NuccCamera};
 
 pub use nucc_chunk::{
     NuccChunkAnm, nucc_chunk_anm::AnmClump, nucc_chunk_anm::AnmCoord, 
     nucc_chunk_anm::CoordParent, nucc_chunk_anm::EntryFormat,
-    nucc_chunk_anm::CurveHeader,
-    nucc_chunk_anm::Curve, nucc_chunk_anm::CurveFormat,
-    nucc_chunk_anm::Math
+    nucc_chunk_anm::TrackHeader,
+    nucc_chunk_anm::NuccAnmKeyFormat,
+    nucc_chunk_anm::NuccAnmKey
 };
 
 use xfbin_file::XfbinFile;
 
 
-/*#[pyfunction]
+#[pyfunction]
 pub fn read_xfbin(filepath: &str) -> PyResult<Xfbin> {
     let buffer = fs::read(filepath)?;
 
@@ -49,7 +49,7 @@ pub fn read_xfbin_buf(buf: Vec<u8>) -> PyResult<Xfbin> {
     Ok(xfbin_file.into())
 
     
-}*/
+}
 
 #[pyfunction]
 pub fn write_xfbin(xfbin: Xfbin, filepath: &str) -> PyResult<()> {
@@ -76,9 +76,9 @@ pub fn write_xfbin_buf(xfbin: Xfbin) -> PyResult<Vec<u8>> {
 }
 
 #[pymodule]
-fn xfbinlib(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    //m.add_function(wrap_pyfunction!(read_xfbin, m)?)?;
-    //m.add_function(wrap_pyfunction!(read_xfbin_buf, m)?)?;
+fn xfbin_lib(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(read_xfbin, m)?)?;
+    m.add_function(wrap_pyfunction!(read_xfbin_buf, m)?)?;
     m.add_function(wrap_pyfunction!(write_xfbin, m)?)?;
     m.add_function(wrap_pyfunction!(write_xfbin_buf, m)?)?;
     m.add_class::<Xfbin>()?;
@@ -94,10 +94,10 @@ fn xfbinlib(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CoordParent>()?;
     m.add_class::<EntryFormat>()?;
     m.add_class::<Entry>()?;
-    m.add_class::<CurveHeader>()?;
-    m.add_class::<Curve>()?;
-    m.add_class::<CurveFormat>()?;
-    m.add_class::<Math>()?;
+    m.add_class::<TrackHeader>()?;
+    m.add_class::<Track>()?;
+    m.add_class::<NuccAnmKeyFormat>()?;
+    m.add_class::<NuccAnmKey>()?;
     
 
     Ok(())

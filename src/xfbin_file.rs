@@ -15,6 +15,7 @@ pub struct XfbinFile {
     pub chunks: Vec<XfbinChunk>,
 }
 
+
 #[binrw]
 #[brw(magic = b"NUCC")]
 #[derive(Debug, Clone, Default)]

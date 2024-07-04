@@ -4,7 +4,7 @@
 //!
 use std::{default, io::{Read, Seek, Write}};
 use pyo3::prelude::*;
-use binrw::{binrw, BinRead, BinResult, BinWrite, ReadOptions, WriteOptions};
+use binrw::{binrw, BinRead, BinReaderExt, BinResult, BinWrite, ReadOptions, WriteOptions};
 
 use super::{NuccChunk, NuccChunkType};
 
@@ -186,54 +186,53 @@ pub struct AnmEntry {
     #[pyo3(get, set)]
     pub entry_format: EntryFormat,
 
-    #[bw(calc = curve_headers.len() as u16)]
-    pub curve_count: u16,
+    #[bw(calc = track_headers.len() as u16)]
+    pub track_count: u16,
 
-    #[br(count = curve_count)]
-    pub curve_headers: Vec<CurveHeader>,
+    #[br(count = track_count)]
+    pub track_headers: Vec<TrackHeader>,
 
-    #[br(parse_with = read_curve(curve_headers.iter()))]
+    #[br(parse_with = read_tracks(track_headers.iter()))]
     #[br(align_after = 4)]
-    pub curves: Vec<Curve>,
+    pub tracks: Vec<AnmTrack>,
 }
-
+ 
 
 #[pyclass]
 #[binrw]
-#[derive(Debug, Clone, PartialEq)]
-pub struct CurveHeader {
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TrackHeader {
     #[pyo3(get, set)]
-    pub curve_index: u16,
+    pub track_index: u16,
     #[pyo3(get, set)]
-    pub curve_format: CurveFormat,
+    pub key_format: NuccAnmKeyFormat,
     #[pyo3(get, set)]
     pub frame_count: u16,
-    #[pyo3(get, set)]
-    pub curve_size: u16,
+
+    #[bw(calc = key_format.size_per_frame() as u16 * frame_count)]
+    pub track_size: u16,
 }
 
 #[pymethods]
-impl CurveHeader {
+impl TrackHeader {
     #[new]
-    #[pyo3(signature = (curve_index = 0, curve_format = None, frame_count = 0, curve_size = 0))]
+    #[pyo3(signature = (track_index = 0, key_format = None, frame_count = 0))]
     pub fn __new__(
-        curve_index: u16,
-        curve_format: Option<CurveFormat>,
+        track_index: u16,
+        key_format: Option<NuccAnmKeyFormat>,
         frame_count: u16,
-        curve_size: u16,
     ) -> Self {
         Self {
-            curve_index,
-            curve_format: curve_format.unwrap_or_default(),
+            track_index,
+            key_format: key_format.unwrap_or_default(),
             frame_count,
-            curve_size,
         }
     }
 
     pub fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
-            "CurveHeader(curve_index={}, curve_format={:?}, frame_count={}, curve_size={})",
-            self.curve_index, self.curve_format, self.frame_count, self.curve_size
+            "TrackHeader(track_index={}, key_format={:?}, frame_count={})",
+            self.track_index, self.key_format, self.frame_count
         ))
     }
 
@@ -246,7 +245,7 @@ impl CurveHeader {
 #[binrw]
 #[brw(repr(u16))]
 #[derive(Debug, Clone, PartialEq, Default)]
-pub enum CurveFormat {
+pub enum NuccAnmKeyFormat {
     Vector3Fixed = 0x5,
     Vector3Linear = 0x6,
     Vector3Bezier = 0x7,
@@ -274,106 +273,88 @@ pub enum CurveFormat {
     Unknown,
 }
 
-
-impl CurveFormat {
+impl NuccAnmKeyFormat {
     pub fn size_per_frame(&self) -> usize {
         match self {
-            CurveFormat::OpacityShortTable | CurveFormat::OpacityShortTableNoInterp => 0x02,
-            CurveFormat::ColorRGBTable => 0x03,
-            CurveFormat::FloatFixed | CurveFormat::FloatTable | CurveFormat::FloatTableNoInterp => {
+            NuccAnmKeyFormat::OpacityShortTable | NuccAnmKeyFormat::OpacityShortTableNoInterp => 0x02,
+            NuccAnmKeyFormat::ColorRGBTable => 0x03,
+            NuccAnmKeyFormat::FloatFixed | NuccAnmKeyFormat::FloatTable | NuccAnmKeyFormat::FloatTableNoInterp => {
                 0x04
             }
-            CurveFormat::ScaleShortTable => 0x06,
-            CurveFormat::FloatLinear
-            | CurveFormat::Vector2Fixed
-            | CurveFormat::QuaternionShortTable
-            | CurveFormat::QuaternionShortTableNoInterp => 0x08,
-            CurveFormat::Vector3Fixed
-            | CurveFormat::EulerXYZFixed
-            | CurveFormat::Vector2Linear
-            | CurveFormat::Vector3Table
-            | CurveFormat::Vector3TableNoInterp => 0x0C,
-            CurveFormat::Vector3Linear | CurveFormat::QuaternionTable => 0x10,
-            CurveFormat::QuaternionLinear => 0x14,
-            CurveFormat::Vector3Bezier => todo!(),
-            CurveFormat::EulerInterpolated => todo!(),
-            CurveFormat::Vector3ShortLinear => todo!(),
-            CurveFormat::Unknown => todo!(),
+            NuccAnmKeyFormat::ScaleShortTable => 0x06,
+            NuccAnmKeyFormat::FloatLinear
+            | NuccAnmKeyFormat::Vector2Fixed
+            | NuccAnmKeyFormat::QuaternionShortTable
+            | NuccAnmKeyFormat::QuaternionShortTableNoInterp => 0x08,
+            NuccAnmKeyFormat::Vector3Fixed
+            | NuccAnmKeyFormat::EulerXYZFixed
+            | NuccAnmKeyFormat::Vector2Linear
+            | NuccAnmKeyFormat::Vector3Table
+            | NuccAnmKeyFormat::Vector3TableNoInterp => 0x0C,
+            NuccAnmKeyFormat::Vector3Linear | NuccAnmKeyFormat::QuaternionTable => 0x10,
+            NuccAnmKeyFormat::QuaternionLinear => 0x14,
+            NuccAnmKeyFormat::Vector3Bezier => 0x10,
+            NuccAnmKeyFormat::EulerInterpolated => 0x0C,
+            NuccAnmKeyFormat::Vector3ShortLinear => 0x0C,
+            NuccAnmKeyFormat::Unknown => 0x0C,
         }
     }
 
     
 }
 
-
-#[pyclass(name = "math")]
+#[pyclass]
 #[binrw]
 #[derive(Debug, Clone, PartialEq)]
-pub enum Math {
+pub enum NuccAnmKey {
 
-    Vec3 { channels: (f32, f32, f32) },
-    Vec3Linear { frame: i32, channels: (f32, f32, f32) },
-    Vec4Linear { frame: i32, channels: (f32, f32, f32, f32) },
-    Float { channels: f32 },
-    FloatLinear { frame: i32, channels: f32 },
-    I16Vec { channels: i16 },
-    I16Vec3 { channels: (i16, i16, i16) },
-    I16Vec4 { channels: (i16, i16, i16, i16) },
-    Color { channels: (u8, u8, u8) },
+    Vec3 { values: (f32, f32, f32) },
+    Vec3Linear { frame: i32, values: (f32, f32, f32) },
+    Vec4Linear { frame: i32, values: (f32, f32, f32, f32) },
+    Float { values: f32 },
+    FloatLinear { frame: i32, values: f32 },
+    I16Vec { values: i16 },
+    I16Vec3 { values: (i16, i16, i16) },
+    ShortVec4 { values: (i16, i16, i16, i16) }, // QuaternionShortTable
+    Color { values: (u8, u8, u8) }, // ColorRGBTable
 
     // Add more variants as needed...
     Unknown {}
     
 }
 
-
-
-impl default::Default for Math {
+impl default::Default for NuccAnmKey {
     fn default() -> Self {
-        Math::Unknown {}
+        NuccAnmKey::Unknown {}
     }
 }
 
-
 #[pyclass]
 #[binrw]
-#[br(import_raw(header: CurveHeader))]
+#[br(import_raw(header: TrackHeader))]
 #[derive(Debug, Clone, PartialEq)]
-pub struct Curve {
-    #[brw(ignore)]
+pub struct AnmTrack {
     #[pyo3(get, set)]
-    pub curve_format: CurveFormat, // Used for writing the data
-
-    #[brw(ignore)]
-    #[pyo3(get, set)]
-    pub keyframe: Math,
-
-
-    #[br(count = header.curve_format.size_per_frame() * header.frame_count as usize)]
-    #[bw(write_with = |_data, writer, wo, () | write_curve(curve_format.clone(), keyframe.clone(), writer, wo, ()))]
-    pub data: Vec<u8>,
+    #[br(parse_with = |r, o, _h: TrackHeader| read_track_data(r, o, header))]
+    pub keys: Vec<NuccAnmKey>,
 }
 
 #[pymethods]
-impl Curve {
+impl AnmTrack {
     #[new]
-    #[pyo3(signature = (curve_format = None, keyframe = None, data = None))]
+    #[pyo3(signature = (keys = None))]
     pub fn __new__(
-        curve_format: Option<CurveFormat>,
-        keyframe: Option<Math>,
-        data: Option<Vec<u8>>,
+        keys: Option<Vec<NuccAnmKey>>,
     ) -> Self {
         Self {
-            curve_format: curve_format.unwrap_or_default(),
-            keyframe: keyframe.unwrap_or_default(),
-            data: data.unwrap_or_default(),
+            keys: keys.unwrap_or_default(),
         }
     }
 
     pub fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
-            "Curve {{ curve_format: {:?}, keyframe: {:?}}}",
-            self.curve_format, self.keyframe
+            "NuccAnmKeyFormat {{keyframes: {:?}}}",
+            self.keys
         ))
     }
 
@@ -382,7 +363,7 @@ impl Curve {
     }
 }
 
-fn read_curve<'it, R, T, Arg, Ret, It>(
+fn read_tracks<'it, R, T, Arg, Ret, It>(
     it: It,
 ) -> impl FnOnce(&mut R, &ReadOptions, ()) -> BinResult<Ret>
 where
@@ -398,80 +379,173 @@ where
     }
 }
 
-fn write_curve<R: Write + Seek>(
-    curve_format: CurveFormat,
-    values: Math,
+
+fn read_track_data<R: Read + Seek>(
+    reader: &mut R,
+    _: &ReadOptions, 
+    header: TrackHeader
+
+) -> BinResult<Vec<NuccAnmKey>> {
+    
+    let mut keyframes: Vec<NuccAnmKey> = Vec::new();
+
+      
+    for _ in 0..header.frame_count {
+        match header.key_format {
+            NuccAnmKeyFormat::Vector3Fixed => {
+                let x = reader.read_be::<f32>()?;
+                let y = reader.read_be::<f32>()?;
+                let z = reader.read_be::<f32>()?;
+                keyframes.push(NuccAnmKey::Vec3 { values: (x, y, z) });
+            }
+
+            NuccAnmKeyFormat::Vector3Linear => {
+                let frame = reader.read_be::<i32>()?;
+                let x = reader.read_be::<f32>()?;
+                let y = reader.read_be::<f32>()?;
+                let z = reader.read_be::<f32>()?;
+                keyframes.push(NuccAnmKey::Vec3Linear { frame, values: (x, y, z) });
+            }
+
+
+            NuccAnmKeyFormat::QuaternionShortTable => {
+                let x = reader.read_be::<i16>()?;
+                let y = reader.read_be::<i16>()?;
+                let z = reader.read_be::<i16>()?;
+                let w = reader.read_be::<i16>()?;
+                keyframes.push(NuccAnmKey::ShortVec4 { values: (x, y, z, w) });
+            }
+            
+            NuccAnmKeyFormat::QuaternionLinear => {
+                let frame = reader.read_be::<i32>()?;
+                let x = reader.read_be::<f32>()?;
+                let y = reader.read_be::<f32>()?;
+                let z = reader.read_be::<f32>()?;
+                let w = reader.read_be::<f32>()?;
+                keyframes.push(NuccAnmKey::Vec4Linear { frame, values: (x, y, z, w) });
+            }
+
+            
+
+            NuccAnmKeyFormat::FloatFixed => {
+                let x = reader.read_be::<f32>()?;
+                keyframes.push(NuccAnmKey::Float { values: x });
+            }
+
+            NuccAnmKeyFormat::FloatLinear => {
+                let frame = reader.read_be::<i32>()?;
+                let x = reader.read_be::<f32>()?;
+                keyframes.push(NuccAnmKey::FloatLinear { frame, values: x });
+            }
+
+
+            NuccAnmKeyFormat::OpacityShortTable => {
+                let x = reader.read_be::<i16>()?;
+                keyframes.push(NuccAnmKey::I16Vec { values: x });
+            }
+
+            NuccAnmKeyFormat::ScaleShortTable => {
+                let x = reader.read_be::<i16>()?;
+                let y = reader.read_be::<i16>()?;
+                let z = reader.read_be::<i16>()?;
+                keyframes.push(NuccAnmKey::I16Vec3 { values: (x, y, z) });
+            }
+
+            NuccAnmKeyFormat::ColorRGBTable => {
+                let r = reader.read_be::<u8>()?;
+                let g = reader.read_be::<u8>()?;
+                let b = reader.read_be::<u8>()?;
+                keyframes.push(NuccAnmKey::Color { values: (r, g, b) });
+            }
+
+
+            
+            _ => todo!(),
+
+        }
+        
+
+
+
+        
+    }
+
+    Ok(keyframes)
+}
+
+
+fn write_fcurve_data<R: Write + Seek>(
+    anm_key: NuccAnmKeyFormat,
+    values: NuccAnmKey,
     writer: &mut R,
     wo: &WriteOptions,
     
     _: ()
 ) -> BinResult<()> {
 
-    match (curve_format, values) {
-        (CurveFormat::Vector3Fixed, Math::Vec3 { channels }) |
-        (CurveFormat::EulerXYZFixed, Math::Vec3 { channels }) |
-        (CurveFormat::Vector3Table, Math::Vec3 { channels }) => {
-            channels.0.write_options(writer, wo, ())?;
-            channels.1.write_options(writer, wo, ())?;
-            channels.2.write_options(writer, wo, ())?;
+    match (anm_key, values) {
+        (NuccAnmKeyFormat::Vector3Fixed, NuccAnmKey::Vec3 { values }) |
+        (NuccAnmKeyFormat::EulerXYZFixed, NuccAnmKey::Vec3 { values }) |
+        (NuccAnmKeyFormat::Vector3Table, NuccAnmKey::Vec3 { values }) => {
+            values.0.write_options(writer, wo, ())?;
+            values.1.write_options(writer, wo, ())?;
+            values.2.write_options(writer, wo, ())?;
         }
     
-        (CurveFormat::Vector3Linear, Math::Vec3Linear { frame, channels }) => {
+        (NuccAnmKeyFormat::Vector3Linear, NuccAnmKey::Vec3Linear { frame, values }) => {
             frame.write_options(writer, wo, ())?;
-            channels.0.write_options(writer, wo, ())?;
-            channels.1.write_options(writer, wo, ())?;
-            channels.2.write_options(writer, wo, ())?;
+            values.0.write_options(writer, wo, ())?;
+            values.1.write_options(writer, wo, ())?;
+            values.2.write_options(writer, wo, ())?;
         }
 
-        (CurveFormat::QuaternionLinear, Math::Vec4Linear { frame, channels }) => {
+        (NuccAnmKeyFormat::QuaternionLinear, NuccAnmKey::Vec4Linear { frame, values }) => {
             frame.write_options(writer, wo, ())?;
-            channels.0.write_options(writer, wo, ())?;
-            channels.1.write_options(writer, wo, ())?;
-            channels.2.write_options(writer, wo, ())?;
-            channels.3.write_options(writer, wo, ())?;
+            values.0.write_options(writer, wo, ())?;
+            values.1.write_options(writer, wo, ())?;
+            values.2.write_options(writer, wo, ())?;
+            values.3.write_options(writer, wo, ())?;
         }
 
-        (CurveFormat::FloatFixed, Math::Float { channels }) |
-        (CurveFormat::FloatTable, Math::Float { channels}) |
-        (CurveFormat::FloatTableNoInterp, Math::Float { channels}) => {
-            channels.write_options(writer, wo, ())?;
+        (NuccAnmKeyFormat::FloatFixed, NuccAnmKey::Float { values }) |
+        (NuccAnmKeyFormat::FloatTable, NuccAnmKey::Float { values}) |
+        (NuccAnmKeyFormat::FloatTableNoInterp, NuccAnmKey::Float { values}) => {
+            values.write_options(writer, wo, ())?;
         }
 
-        (CurveFormat::FloatLinear, Math::FloatLinear { frame, channels }) => {
+        (NuccAnmKeyFormat::FloatLinear, NuccAnmKey::FloatLinear { frame, values }) => {
             frame.write_options(writer, wo, ())?;
-            channels.write_options(writer, wo, ())?;
+            values.write_options(writer, wo, ())?;
         }
 
-        (CurveFormat::OpacityShortTable, Math::I16Vec { channels }) |
-        (CurveFormat::OpacityShortTableNoInterp, Math::I16Vec { channels }) => {
-            channels.write_options(writer, wo, ())?;
+        (NuccAnmKeyFormat::OpacityShortTable, NuccAnmKey::I16Vec { values }) |
+        (NuccAnmKeyFormat::OpacityShortTableNoInterp, NuccAnmKey::I16Vec { values }) => {
+            values.write_options(writer, wo, ())?;
         }
 
-        (CurveFormat::ScaleShortTable, Math::I16Vec3 { channels }) => {
-            channels.0.write_options(writer, wo, ())?;
-            channels.1.write_options(writer, wo, ())?;
-            channels.2.write_options(writer, wo, ())?;
+        (NuccAnmKeyFormat::ScaleShortTable, NuccAnmKey::I16Vec3 { values }) => {
+            values.0.write_options(writer, wo, ())?;
+            values.1.write_options(writer, wo, ())?;
+            values.2.write_options(writer, wo, ())?;
         }
 
-        (CurveFormat::QuaternionShortTable, Math::I16Vec4 { channels }) |
-        (CurveFormat::QuaternionShortTableNoInterp, Math::I16Vec4 { channels }) => {
-            channels.0.write_options(writer, wo, ())?;
-            channels.1.write_options(writer, wo, ())?;
-            channels.2.write_options(writer, wo, ())?;
-            channels.3.write_options(writer, wo, ())?;
+        (NuccAnmKeyFormat::QuaternionShortTable, NuccAnmKey::ShortVec4 { values }) |
+        (NuccAnmKeyFormat::QuaternionShortTableNoInterp, NuccAnmKey::ShortVec4 { values }) => {
+            values.0.write_options(writer, wo, ())?;
+            values.1.write_options(writer, wo, ())?;
+            values.2.write_options(writer, wo, ())?;
+            values.3.write_options(writer, wo, ())?;
         }
 
-        (CurveFormat::ColorRGBTable, Math::Color { channels }) => {
-            channels.0.write_options(writer, wo, ())?;
-            channels.1.write_options(writer, wo, ())?;
-            channels.2.write_options(writer, wo, ())?;
+        (NuccAnmKeyFormat::ColorRGBTable, NuccAnmKey::Color { values }) => {
+            values.0.write_options(writer, wo, ())?;
+            values.1.write_options(writer, wo, ())?;
+            values.2.write_options(writer, wo, ())?;
         }
-        // Handle other CurveFormat cases and Keyframe variants...
+        // Handle other NuccAnmKeyFormat cases and Keyframe variants...
         _ => todo!(),
     }
     
-
-
     Ok(())
 }
 
@@ -487,7 +561,5 @@ impl NuccChunk for NuccChunkAnm {
         self.version
     }
 
-    fn extension(&self) -> String {
-        String::from(".anm")
-    }
+    
 }
