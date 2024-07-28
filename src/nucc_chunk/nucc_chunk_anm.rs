@@ -425,9 +425,12 @@ fn read_track_data<R: Read + Seek>(
                 keyframes.push(NuccAnmKey::Vec4Linear { frame, values: (x, y, z, w) });
             }
 
-            
-
             NuccAnmKeyFormat::FloatFixed => {
+                let x = reader.read_be::<f32>()?;
+                keyframes.push(NuccAnmKey::Float { values: x });
+            }
+
+            NuccAnmKeyFormat::FloatTable => {
                 let x = reader.read_be::<f32>()?;
                 keyframes.push(NuccAnmKey::Float { values: x });
             }
@@ -437,7 +440,6 @@ fn read_track_data<R: Read + Seek>(
                 let x = reader.read_be::<f32>()?;
                 keyframes.push(NuccAnmKey::FloatLinear { frame, values: x });
             }
-
 
             NuccAnmKeyFormat::OpacityShortTable => {
                 let x = reader.read_be::<i16>()?;
@@ -457,99 +459,18 @@ fn read_track_data<R: Read + Seek>(
                 let b = reader.read_be::<u8>()?;
                 keyframes.push(NuccAnmKey::Color { values: (r, g, b) });
             }
-
-
             
-            _ => todo!(),
+            // Return an error saying that the key format is not supported and the key format itself
+            _ => {
 
+                dbg!(format!("Key format {:?} is not supported", header.key_format));
+            }
         }
-        
-
-
-
-        
+    
     }
 
     Ok(keyframes)
 }
-
-
-fn write_fcurve_data<R: Write + Seek>(
-    anm_key: NuccAnmKeyFormat,
-    values: NuccAnmKey,
-    writer: &mut R,
-    wo: &WriteOptions,
-    
-    _: ()
-) -> BinResult<()> {
-
-    match (anm_key, values) {
-        (NuccAnmKeyFormat::Vector3Fixed, NuccAnmKey::Vec3 { values }) |
-        (NuccAnmKeyFormat::EulerXYZFixed, NuccAnmKey::Vec3 { values }) |
-        (NuccAnmKeyFormat::Vector3Table, NuccAnmKey::Vec3 { values }) => {
-            values.0.write_options(writer, wo, ())?;
-            values.1.write_options(writer, wo, ())?;
-            values.2.write_options(writer, wo, ())?;
-        }
-    
-        (NuccAnmKeyFormat::Vector3Linear, NuccAnmKey::Vec3Linear { frame, values }) => {
-            frame.write_options(writer, wo, ())?;
-            values.0.write_options(writer, wo, ())?;
-            values.1.write_options(writer, wo, ())?;
-            values.2.write_options(writer, wo, ())?;
-        }
-
-        (NuccAnmKeyFormat::QuaternionLinear, NuccAnmKey::Vec4Linear { frame, values }) => {
-            frame.write_options(writer, wo, ())?;
-            values.0.write_options(writer, wo, ())?;
-            values.1.write_options(writer, wo, ())?;
-            values.2.write_options(writer, wo, ())?;
-            values.3.write_options(writer, wo, ())?;
-        }
-
-        (NuccAnmKeyFormat::FloatFixed, NuccAnmKey::Float { values }) |
-        (NuccAnmKeyFormat::FloatTable, NuccAnmKey::Float { values}) |
-        (NuccAnmKeyFormat::FloatTableNoInterp, NuccAnmKey::Float { values}) => {
-            values.write_options(writer, wo, ())?;
-        }
-
-        (NuccAnmKeyFormat::FloatLinear, NuccAnmKey::FloatLinear { frame, values }) => {
-            frame.write_options(writer, wo, ())?;
-            values.write_options(writer, wo, ())?;
-        }
-
-        (NuccAnmKeyFormat::OpacityShortTable, NuccAnmKey::I16Vec { values }) |
-        (NuccAnmKeyFormat::OpacityShortTableNoInterp, NuccAnmKey::I16Vec { values }) => {
-            values.write_options(writer, wo, ())?;
-        }
-
-        (NuccAnmKeyFormat::ScaleShortTable, NuccAnmKey::I16Vec3 { values }) => {
-            values.0.write_options(writer, wo, ())?;
-            values.1.write_options(writer, wo, ())?;
-            values.2.write_options(writer, wo, ())?;
-        }
-
-        (NuccAnmKeyFormat::QuaternionShortTable, NuccAnmKey::ShortVec4 { values }) |
-        (NuccAnmKeyFormat::QuaternionShortTableNoInterp, NuccAnmKey::ShortVec4 { values }) => {
-            values.0.write_options(writer, wo, ())?;
-            values.1.write_options(writer, wo, ())?;
-            values.2.write_options(writer, wo, ())?;
-            values.3.write_options(writer, wo, ())?;
-        }
-
-        (NuccAnmKeyFormat::ColorRGBTable, NuccAnmKey::Color { values }) => {
-            values.0.write_options(writer, wo, ())?;
-            values.1.write_options(writer, wo, ())?;
-            values.2.write_options(writer, wo, ())?;
-        }
-        // Handle other NuccAnmKeyFormat cases and Keyframe variants...
-        _ => todo!(),
-    }
-    
-    Ok(())
-}
-
-
 
 
 impl NuccChunk for NuccChunkAnm {
@@ -560,6 +481,4 @@ impl NuccChunk for NuccChunkAnm {
     fn version(&self) -> u16 {
         self.version
     }
-
-    
 }

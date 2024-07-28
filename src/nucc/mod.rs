@@ -240,6 +240,11 @@ impl Clone for Box<dyn NuccStruct> {
                 let nucc_camera: &NuccCamera = self.downcast_ref().unwrap();
                 Box::new(nucc_camera.clone()) as Box<dyn NuccStruct>
             }
+
+            NuccChunkType::NuccChunkUnknown => {
+                let nucc_unknown: &NuccUnknown = self.downcast_ref().unwrap();
+                Box::new(nucc_unknown.clone()) as Box<dyn NuccStruct>
+            }
             // Add other cases for the remaining concrete types
             _ => panic!("Unsupported NuccStruct type for cloning"),
         }
@@ -292,9 +297,13 @@ impl<'a> FromPyObject<'a> for Box<dyn NuccStruct> {
             return Ok(Box::new(nucc_camera));
         }
 
-        Err(pyo3::exceptions::PyTypeError::new_err(
-            "Unsupported NuccStruct type for conversion from PyAny",
-        ))
+        if let Ok(nucc_unknown) = obj.extract::<NuccUnknown>() {
+            return Ok(Box::new(nucc_unknown));
+        }
+
+        // Add other cases for the remaining concrete types
+        Err(pyo3::exceptions::PyTypeError::new_err("Unsupported NuccStruct type"))
+
     }
 }
 
@@ -347,9 +356,6 @@ impl From<NuccChunkConverter> for Box<dyn NuccChunk> {
             NuccChunkType::NuccChunkAmbient => { Box::<NuccChunkAmbient>::from(converter) as Box<dyn NuccChunk> }
             NuccChunkType::NuccChunkMorphModel => { Box::<NuccChunkMorphModel>::from(converter) as Box<dyn NuccChunk> }
             NuccChunkType::NuccChunkUnknown => { Box::<NuccChunkUnknown>::from(converter) as Box<dyn NuccChunk> }
-
-
-
             any => panic!("Unexpected NuccChunkType: {any}"),
         }
     }

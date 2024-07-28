@@ -23,7 +23,7 @@ pub struct NuccAnm {
     pub is_looped: bool,
 
     #[pyo3(get, set)]
-    pub other_entries_indices: Vec<u32>,
+    pub other_entries_indices: Py<PyList>,
 
     #[pyo3(get, set)]
     pub unk_entry_indices: Vec<u32>,
@@ -36,6 +36,48 @@ pub struct NuccAnm {
 
     #[pyo3(get, set)]
     pub entries: Py<PyList>,
+}
+
+#[pymethods]
+impl NuccAnm {
+    #[new]
+    #[pyo3(signature = (struct_info = None, version = 121, frame_count = 0, is_looped = false, other_entries_indices = None, unk_entry_indices = None, clumps = None, coord_parents = None, entries = None))]
+    pub fn __new__(
+        py: Python,
+        struct_info: Option<NuccStructInfo>,
+        version: u16,
+        frame_count: u32,
+        is_looped: bool,
+        other_entries_indices: Option<Py<PyList>>,
+        unk_entry_indices: Option<Vec<u32>>,
+        clumps: Option<Py<PyList>>,
+        coord_parents: Option<Py<PyList>>,
+        entries: Option<Py<PyList>>,
+    ) -> Self {
+        Self {
+            struct_info: struct_info.unwrap_or_default(),
+            version,
+            frame_count,
+            is_looped,
+            other_entries_indices: other_entries_indices.unwrap_or(PyList::empty_bound(py).into()),
+            unk_entry_indices: unk_entry_indices.unwrap_or_default(),
+            clumps: clumps.unwrap_or(PyList::empty_bound(py).into()),
+            coord_parents: coord_parents.unwrap_or(PyList::empty_bound(py).into()),
+            entries: entries.unwrap_or(PyList::empty_bound(py).into()),
+        }
+    }
+
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!(
+            "NuccAnm(struct_info={:?}, version={}, frame_count={}, is_looped={}, other_entries_indices={:?}, unk_entry_indices={:?} clumps={:?}, coord_parents={:?}, entries={:?})",
+            self.struct_info, self.version, self.frame_count, self.is_looped, self.other_entries_indices, self.unk_entry_indices, self.clumps,  self.coord_parents, self.entries
+        ))
+    }
+
+    fn __str__(&self) -> PyResult<String> {
+        self.__repr__()
+    }
+
 }
 
 #[derive(Debug, Clone)]
@@ -129,47 +171,7 @@ impl Track {
 
 }
 
-#[pymethods]
-impl NuccAnm {
-    #[new]
-    #[pyo3(signature = (struct_info = None, version = 121, frame_count = 0, is_looped = false, other_entries_indices = None, unk_entry_indices = None, clumps = None, coord_parents = None, entries = None))]
-    pub fn __new__(
-        py: Python,
-        struct_info: Option<NuccStructInfo>,
-        version: u16,
-        frame_count: u32,
-        is_looped: bool,
-        other_entries_indices: Option<Vec<u32>>,
-        unk_entry_indices: Option<Vec<u32>>,
-        clumps: Option<Py<PyList>>,
-        coord_parents: Option<Py<PyList>>,
-        entries: Option<Py<PyList>>,
-    ) -> Self {
-        Self {
-            struct_info: struct_info.unwrap_or_default(),
-            version,
-            frame_count,
-            is_looped,
-            other_entries_indices: other_entries_indices.unwrap_or_default(),
-            unk_entry_indices: unk_entry_indices.unwrap_or_default(),
-            clumps: clumps.unwrap_or(PyList::empty_bound(py).into()),
-            coord_parents: coord_parents.unwrap_or(PyList::empty_bound(py).into()),
-            entries: entries.unwrap_or(PyList::empty_bound(py).into()),
-        }
-    }
 
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!(
-            "NuccAnm(struct_info={:?}, version={}, frame_count={}, is_looped={}, other_entries_indices={:?}, unk_entry_indices={:?} clumps={:?}, coord_parents={:?}, entries={:?})",
-            self.struct_info, self.version, self.frame_count, self.is_looped, self.other_entries_indices, self.unk_entry_indices, self.clumps,  self.coord_parents, self.entries
-        ))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        self.__repr__()
-    }
-
-}
 
 impl_nucc_info!(NuccAnm, struct_info);
 
@@ -186,6 +188,14 @@ impl From<NuccStructConverter> for NuccAnm {
             .map(|c| *c)
             .ok()
             .unwrap();
+
+            let other_entries_indices: Py<PyList> = Python::with_gil(|py| {
+                let other_entries_indices: Vec<PyObject> = chunk.other_entries_indices.iter().map(|&value| {
+                    value.into_py(py)
+                }).collect();
+    
+                PyList::new_bound(py, other_entries_indices).into()
+            });
         
 
         let clumps: Py<PyList> = Python::with_gil(|py| {
@@ -261,7 +271,7 @@ impl From<NuccStructConverter> for NuccAnm {
             frame_count: chunk.frame_count,
             is_looped: chunk.is_looped == 1,
             clumps,
-            other_entries_indices: chunk.other_entries_indices,
+            other_entries_indices,
             unk_entry_indices: chunk.unk_entry_indices,
             coord_parents,
             entries,
@@ -278,6 +288,10 @@ impl From<NuccChunkConverter> for Box<NuccChunkAnm> {
         } = converter;
 
         let anm = nucc_struct.downcast::<NuccAnm>().map(|s| *s).ok().unwrap();
+
+        let other_entries_indices: Vec<u32> = Python::with_gil(|py| {
+            anm.other_entries_indices.extract(py).unwrap()
+        });
 
         let clumps: Vec<AnmClump> = Python::with_gil(|py| {
             anm.clumps.extract(py).unwrap()
@@ -320,7 +334,7 @@ impl From<NuccChunkConverter> for Box<NuccChunkAnm> {
         chunk.frame_count = anm.frame_count;
         chunk.is_looped = if anm.is_looped { 1 } else { 0 };
         chunk.clumps = clumps;
-        chunk.other_entries_indices = anm.other_entries_indices;
+        chunk.other_entries_indices = other_entries_indices;
         chunk.unk_entry_indices = anm.unk_entry_indices;
         chunk.coord_parents = coord_parents;
         chunk.entries = anm_entries;

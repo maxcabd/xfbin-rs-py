@@ -126,11 +126,9 @@ impl XfbinPage {
             self.structs.extract(py).unwrap()
         });
 
-
         let mut struct_infos = IndexMap::<NuccStructInfo, u32>::new();
         let mut struct_references = IndexMap::<NuccStructReference, u32>::new();
 
- 
         let struct_infos_vec: Vec<NuccStructInfo> = Python::with_gil(|py| {
             self.struct_infos.extract(py).unwrap()
         });
@@ -144,7 +142,6 @@ impl XfbinPage {
             struct_references.extend(struct_references_vec.iter().enumerate().map(|(i, s)| ((*s).clone(), i as u32)));
         }
 
-
         (structs, struct_infos, struct_references)
     }
 
@@ -155,13 +152,10 @@ impl From<XfbinFile> for Xfbin {
     fn from(xfbin: XfbinFile) -> Self {
         let mut pages = Vec::new();
 
-        
-
         // Create a new XfbinPage PyObj
         let mut page = Python::with_gil(
             |py| XfbinPage::__new__(py, None, None, None)
         );
-
 
         let chunk_names = xfbin
             .index
@@ -295,11 +289,6 @@ impl From<XfbinFile> for Xfbin {
 
         }
 
-        
-
-
-
- 
         let pages = Python::with_gil(|py| {
             PyList::new_bound(py, pages.iter().map(|page| {
                 Py::new(py, page.clone()).unwrap()
@@ -370,7 +359,7 @@ impl From<Xfbin> for XfbinFile {
                 &mut page_struct_infos,
             );
 
-            //chunks.push(null_chunk);
+            chunks.push(null_chunk);
 
             for nucc_struct in page_structs {
                 let struct_info = nucc_struct.struct_info().clone();
@@ -387,7 +376,7 @@ impl From<Xfbin> for XfbinFile {
             // Add nuccChunkPage map
             repack_struct(
                 Box::new(NuccChunkPage::default()),
-                NuccChunkIndex::default_chunk_info(),
+                NuccChunkPage::default_chunk_info(),
                 &mut page_struct_infos,
             );
 
@@ -398,21 +387,14 @@ impl From<Xfbin> for XfbinFile {
                 &mut page_struct_infos,
             );
 
-            let mut map_index_count = page_struct_infos.len() as u32;
+         
 
-            if map_index_count < 4 {
-                map_index_count = (map_index_count + 3) & !3;
-            }
-
-            else {
-                map_index_count += 1;
-            }
-
+          
             // Create final nuccChunkPage
             let page_chunk = repack_struct(
                 Box::new(NuccChunkPage {
                     version: xfbin.version,
-                    map_index_count,
+                    map_index_count: page_struct_infos.len() as u32,
                     reference_count: page_struct_references.len() as u32,
                 }),
                 NuccChunkPage::default_chunk_info(),
@@ -421,19 +403,21 @@ impl From<Xfbin> for XfbinFile {
 
             chunks.push(page_chunk);
 
+
             for struct_info in page_struct_infos
-                .clone()
-                .into_iter()
-                .sorted_by_key(|(_, v)| *v)
-                .map(|(k, _)| k)
-            {
-                let struct_info_index = struct_infos_map.len() as u32;
-                chunk_map_indices.push(
-                    *struct_infos_map
-                        .entry(struct_info)
-                        .or_insert(struct_info_index),
-                );
-            }
+            .clone()
+            .into_iter()
+            .sorted_by_key(|(_, v)| *v)
+            .map(|(k, _)| k)
+        {
+            let struct_info_index = struct_infos_map.len() as u32;
+            chunk_map_indices.push(
+                *struct_infos_map
+                    .entry(struct_info)
+                    .or_insert(struct_info_index),
+            );
+
+        }
 
             struct_references_vec.extend(
                 page_struct_references

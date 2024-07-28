@@ -3,6 +3,7 @@ use super::*;
 use pyo3::prelude::*;
 
 #[pyclass]
+#[derive(Debug, Clone)]
 pub struct NuccUnknown {
     pub struct_info: NuccStructInfo,
     pub version: u16,

@@ -54,8 +54,7 @@ pub trait NuccChunk: Downcast + fmt::Debug {
 
         // set the version of the chunk
         Ok((input.into(), Box::new(result) as Box<dyn NuccChunk>))
-
-       
+ 
     }
 
     fn write_boxed(
@@ -94,9 +93,6 @@ pub enum NuccChunkType {
     NuccChunkAmbient,
     NuccChunkMorphModel,
     NuccChunkUnknown,
-   
-    
-
 }
 
 impl Default for NuccChunkType {
@@ -116,7 +112,6 @@ impl NuccChunkType {
             NuccChunkType::NuccChunkPage => NuccChunkPage::read_boxed(&data, version),
             NuccChunkType::NuccChunkIndex => Ok((data, Box::new(NuccChunkIndex))),
             NuccChunkType::NuccChunkBinary => NuccChunkBinary::read_boxed(&data, version),
-            
             NuccChunkType::NuccChunkAnm => NuccChunkAnm::read_boxed(&data, version), // Fix: Change `u16` to `()`
             NuccChunkType::NuccChunkAnmStrm => NuccChunkAnmStrm::read_boxed(&data, version),
             NuccChunkType::NuccChunkAnmStrmFrame => { NuccChunkAnmStrmFrame::read_boxed(&data, version)}
@@ -126,9 +121,8 @@ impl NuccChunkType {
             NuccChunkType::NuccChunkLayerSet => NuccChunkLayerSet::read_boxed(&data, version),
             NuccChunkType::NuccChunkAmbient => NuccChunkAmbient::read_boxed(&data, version),
             NuccChunkType::NuccChunkMorphModel => NuccChunkMorphModel::read_boxed(&data, version),
-
-
-            NuccChunkType::NuccChunkUnknown => Ok((
+            // If the chunk type is unknown, return the data as an unknown chunk
+            _ => Ok((
                 data.clone(),
                 Box::new(NuccChunkUnknown {
                     version,
@@ -157,8 +151,8 @@ impl NuccChunkType {
             NuccChunkType::NuccChunkLayerSet => { NuccChunkLayerSet::write_boxed(boxed, &mut output, version)?; }
             NuccChunkType::NuccChunkAmbient => { NuccChunkAmbient::write_boxed(boxed, &mut output, version)?; }
             NuccChunkType::NuccChunkMorphModel => { NuccChunkMorphModel::write_boxed(boxed, &mut output, version)?; }
-
-            NuccChunkType::NuccChunkUnknown => {
+            // If the chunk type is unknown, return the data as an unknown chunk
+            _ => {
                 let unknown = boxed
                     .downcast::<NuccChunkUnknown>()
                     .map(|x| x.data)
